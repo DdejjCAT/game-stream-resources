@@ -154,6 +154,7 @@ gfx_quad_quality 0
 gfx_fs_blur 0
 gfx_water_reflections 0
 gfx_shaders 0
+gfx_fullscreen 0
 snd_enable 1
 gfx_screen_width 640
 gfx_screen_height 480
@@ -162,6 +163,27 @@ CFG
 pkill -9 -f 'ddnet/DDNet' 2>/dev/null || true
 sleep 2
 setsid nohup env DISPLAY=:99 SDL_AUDIODRIVER=pulse SDL_VIDEODRIVER=x11 PULSE_SERVER=unix:/tmp/psock LIBGL_ALWAYS_SOFTWARE=1 $H/ddnet/DDNet >/tmp/dd.log 2>&1 &
+
+echo "== ddmap watchdog =="
+cat > /opt/ddmap.sh << 'MEOF'
+#!/bin/bash
+export DISPLAY=:99
+while true; do
+  W=$(xdotool search --name 'DDNet Client' 2>/dev/null | head -1)
+  if [ -n "$W" ]; then
+    st=$(xwininfo -id "$W" 2>/dev/null | grep 'Map State' | awk '{print $3}')
+    if [ "$st" = "IsUnMapped" ]; then
+      xdotool windowmap --sync "$W" 2>/dev/null
+      xdotool windowactivate --sync "$W" 2>/dev/null
+      xdotool windowraise "$W" 2>/dev/null
+      sleep 3
+    fi
+  fi
+  sleep 5
+done
+MEOF
+chmod +x /opt/ddmap.sh
+pgrep -f ddmap.sh >/dev/null || { setsid nohup /opt/ddmap.sh >/dev/null 2>&1 & echo "ddmap started"; }
 
 echo "== relay start =="
 pkill -9 -f '/opt/relay/server.js' 2>/dev/null || true
