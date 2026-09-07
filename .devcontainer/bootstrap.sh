@@ -7,7 +7,7 @@ H=/home/codespace
 echo "== apt =="
 sudo apt-get update -qq
 sudo apt-get install -y -qq x11-utils xauth imagemagick libvulkan1 mesa-vulkan-drivers \
-  xdotool openbox pulseaudio pulseaudio-utils wget curl unzip jq libxfont2 \
+  xdotool openbox pulseaudio pulseaudio-utils wget curl unzip jq libxfont2 libnotify4 \
   libsdl2-2.0-0 libsdl2-mixer-2.0-0 libfreetype6 net-tools >/dev/null 2>&1
 
 echo "== kasmvnc (Xvnc) =="
@@ -84,7 +84,7 @@ const PAGE='<!doctype html><html><head><meta charset="utf-8"><title>DDNet Remote
 'iframe{width:100%;height:100%;border:0}#ctl{position:fixed;left:10px;bottom:10px;z-index:99;display:flex;gap:8px;align-items:center}'+
 'button{background:#3b82f6;color:#fff;border:0;padding:10px 16px;border-radius:6px;font-size:14px;cursor:pointer}'+
 '#st{color:#9ca3af;margin-left:4px;font:12px monospace;line-height:38px}</style></head><body>'+
-'<div id="stage"><iframe id="g" src="'+(VNC?VNC+'/?autoconnect=true&resize=scale':'')+'"></iframe></div>'+
+'<div id="stage"><iframe id="g" src="@@SRC@@"></iframe></div>'+
 '<div id="ctl"><button id="s">Play sound</button><span id="st"></span><button id="f">Fullscreen</button></div>'+
 '<script>var ws,ctx,playing=false,buf=new Int16Array(0);'+
 'function push(u8){var s16=new Int16Array(u8.buffer,u8.byteOffset,u8.length>>1);var t=new Int16Array(buf.length+s16.length);t.set(buf);t.set(s16,buf.length);buf=t;}'+
@@ -102,15 +102,27 @@ const PAGE='<!doctype html><html><head><meta charset="utf-8"><title>DDNet Remote
 'else{g.requestFullscreen?g.requestFullscreen():g.webkitRequestFullscreen&&g.webkitRequestFullscreen();}};'+
 '</script></body></html>';
 const env=Object.assign({},process.env,{PULSE_SERVER:'unix:/tmp/psock'});
-const server=http.createServer((q,res)=>{res.setHeader('Content-Type','text/html; charset=utf-8');res.end(PAGE);});
+function derive(host){
+  if(!host)return '';
+  if(/-?\d+\.app\.github\.dev$/.test(host))
+    return 'https://'+host.replace(/-\d+\.app\.github\.dev$/,'-6901.app.github.dev')+'/?autoconnect=true&resize=scale';
+  return '';
+}
+const server=http.createServer((q,res)=>{
+  res.setHeader('Content-Type','text/html; charset=utf-8');
+  let src=VNC?VNC+'/?autoconnect=true&resize=scale':derive(q.headers.host||'');
+  res.end(PAGE.replace('@@SRC@@',src.replace(/\&/g,'&amp;')));
+});
 const wss=new WebSocket.Server({server});
-const parec=spawn('parec',['--device=gamestream.monitor','--format=s16le','--channels=2','--rate=44100'],{env});
-parec.stdout.on('data',d=>{for(const w of wss.clients)if(w.readyState===1)w.send(d);});
-parec.stderr.on('data',d=>console.log('parec:',d.toString().trim()));
-parec.on('error',e=>{console.log('parec err:',e.message);setTimeout(()=>process.exit(1),1000);});
-parec.on('exit',c=>{console.log('parec exited',c);setTimeout(()=>process.exit(1),300);});
-server.on('error',e=>{console.log('srv err:',e.message);setTimeout(()=>process.exit(1),500);});
-server.listen(PORT,()=>console.log('relay on '+PORT+' vnc='+(VNC||'NONE')));
+function pspawn(){
+  const p=spawn('parec',['--device=gamestream.monitor','--format=s16le','--channels=2','--rate=44100'],{env});
+  p.stdout.on('data',d=>{for(const w of wss.clients)if(w.readyState===1)w.send(d);});
+  p.stderr.on('data',d=>console.log('parec:',d.toString().trim()));
+  p.on('error',e=>console.log('parec err',e.message));
+  p.on('exit',c=>{console.log('parec exited',c,'-> respawn');setTimeout(pspawn,3000);});
+}
+server.on('error',e=>console.log('srv err',e.message));
+server.listen(PORT,()=>{console.log('relay on '+PORT+' vnc='+(VNC||'auto'));pspawn();});
 JEOF
 
 echo "== Xvnc + wstcp =="
