@@ -1,0 +1,10 @@
+{
+  "image": "mcr.microsoft.com/devcontainers/universal:2",
+  "forwardPorts": [5917, 6901, 6902],
+  "portsAttributes": {
+    "5917": { "label": "VNC RFB", "onAutoForward": "ignore", "visibility": "public" },
+    "6901": { "label": "noVNC video", "visibility": "public" },
+    "6902": { "label": "DDNet play page", "visibility": "public" }
+  },
+  "postCreateCommand": "bash ./.devcontainer/bootstrap.sh"
+}
