@@ -7,12 +7,13 @@ H=/home/codespace
 echo "== apt =="
 sudo apt-get update -qq
 sudo apt-get install -y -qq x11-utils xauth imagemagick libvulkan1 mesa-vulkan-drivers \
-  xdotool openbox pulseaudio pulseaudio-utils wget curl unzip jq \
+  xdotool openbox pulseaudio pulseaudio-utils wget curl unzip jq libxfont2 \
   libsdl2-2.0-0 libsdl2-mixer-2.0-0 libfreetype6 net-tools >/dev/null 2>&1
 
 echo "== kasmvnc (Xvnc) =="
 wget -q -O /tmp/kasmvnc.deb https://github.com/kasmtech/KasmVNC/releases/download/v1.5.0/kasmvncserver_jammy_1.5.0_amd64.deb
-sudo apt-get install -y -qq /tmp/kasmvnc.deb >/dev/null 2>&1 || sudo dpkg --force-all -i /tmp/kasmvnc.deb
+sudo apt-get install -y -qq /tmp/kasmvnc.deb >/tmp/aptkasm.log 2>&1 || { echo "kasm install FAILED"; tail -5 /tmp/aptkasm.log; }
+command -v Xvnc || echo "WARN Xvnc missing"
 
 echo "== pulse (rootless, /tmp/psock) =="
 sudo mkdir -p /etc/pulse
@@ -27,7 +28,8 @@ rm -f /tmp/psock
 setsid nohup pulseaudio -D -nF /etc/pulse/gamestream.pa --exit-idle-time=-1 --disable-shm >/tmp/pulse.log 2>&1 &
 sleep 6
 export PULSE_SERVER=unix:/tmp/psock
-pactl load-module module-null-sink sink_name=gamestream stream_name=Gamestream >/dev/null 2>&1 || true
+pactl load-module module-null-sink sink_name=gamestream >/dev/null 2>&1 || true
+pactl list short sinks
 
 echo "== noVNC =="
 wget -q -O /tmp/novnc.tgz https://github.com/novnc/noVNC/archive/refs/tags/v1.5.0.tar.gz
@@ -158,4 +160,7 @@ sleep 15
 echo "DSTACK-STATE:"
 ss -tln | grep -oE ':(5917|6901|6902) ' | sort -u | tr '\n' ' '; echo
 pgrep -c -f 'ddnet/DDNet' | xargs -I{} echo "ddnet procs: {}"
+pgrep -x openbox >/dev/null && echo "openbox: UP" || echo "openbox: DOWN"
+grep -aE 'GPU renderer|Created' /tmp/dd.log 2>/dev/null | tail -2
+DISPLAY=:99 xdotool search --onlyvisible --name DDNet 2>/dev/null | head -1 | xargs -I{} echo "ddnet window: {}"
 echo "STACK-UP-END"
