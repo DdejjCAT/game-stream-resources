@@ -53,15 +53,26 @@ if [ ! -x /usr/local/sbin/guacd ]; then
       libossp-uuid-dev libpango1.0-dev libwebsockets-dev >/dev/null 2>&1
     cd /tmp
     rm -rf guacamole-server
-    git clone --depth 1 --branch v1.5.5 https://github.com/apache/guacamole-server.git >/dev/null 2>&1
+    git clone --depth 1 --branch 1.5.5 https://github.com/apache/guacamole-server.git
     cd guacamole-server
-    autoreconf -fi >/dev/null 2>&1
-    ./configure --disable-static --with-init-dir=no >/dev/null 2>&1
-    make -j2 >/dev/null 2>&1
-    sudo make install >/dev/null 2>&1
+    autoreconf -fi
+    ./configure --disable-static --with-init-dir=no
+    make -j2
+    sudo make install
     sudo ldconfig
     echo GUACD-BUILD-DONE
   ' >/dev/null 2>&1 &
+fi
+# ждём, пока guacd соберётся и станет доступен, иначе guac-стек недоступен
+for w in $(seq 1 240); do
+  [ -x /usr/local/sbin/guacd ] && grep -q GUACD-BUILD-DONE /tmp/guacd_build.log 2>/dev/null && break
+  sleep 5
+done
+if [ -x /usr/local/sbin/guacd ]; then
+  echo "guacd ready: $(/usr/local/sbin/guacd --version 2>/dev/null | head -3 | tr '\n' ' ')"
+else
+  echo "WARN guacd build failed, tail:"
+  tail -20 /tmp/guacd_build.log 2>/dev/null
 fi
 mkdir -p /opt/guac
 cd /opt/guac && npm install --silent guacamole-lite@1.2.0 >/dev/null 2>&1
