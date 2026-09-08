@@ -1,10 +1,25 @@
 {
   "dockerfile": ".devcontainer/Dockerfile",
-  "forwardPorts": [5917, 6901, 6902],
+  "forwardPorts": [5911, 5912, 5913, 5914, 5915, 5917, 6901, 6902, 6911, 6912, 6913, 6914, 6915, 6931, 6932, 6933, 6934, 6935],
   "portsAttributes": {
-    "5917": { "label": "VNC RFB", "onAutoForward": "ignore", "visibility": "public" },
+    "5911": { "label": "JB RFB slot1", "visibility": "public" },
+    "5912": { "label": "JB RFB slot2", "visibility": "public" },
+    "5913": { "label": "JB RFB slot3", "visibility": "public" },
+    "5914": { "label": "JB RFB slot4", "visibility": "public" },
+    "5915": { "label": "JB RFB slot5", "visibility": "public" },
+    "5917": { "label": "VNC RFB", "visibility": "public" },
     "6901": { "label": "noVNC video", "visibility": "public" },
-    "6902": { "label": "DDNet play page", "visibility": "public" }
+    "6902": { "label": "DDNet play page", "visibility": "public" },
+    "6911": { "label": "JB WSTCP slot1", "visibility": "public" },
+    "6912": { "label": "JB WSTCP slot2", "visibility": "public" },
+    "6913": { "label": "JB WSTCP slot3", "visibility": "public" },
+    "6914": { "label": "JB WSTCP slot4", "visibility": "public" },
+    "6915": { "label": "JB WSTCP slot5", "visibility": "public" },
+    "6931": { "label": "JB relay slot1", "visibility": "public" },
+    "6932": { "label": "JB relay slot2", "visibility": "public" },
+    "6933": { "label": "JB relay slot3", "visibility": "public" },
+    "6934": { "label": "JB relay slot4", "visibility": "public" },
+    "6935": { "label": "JB relay slot5", "visibility": "public" }
   },
   "postCreateCommand": "bash ./.devcontainer/bootstrap.sh"
 }
