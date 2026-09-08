@@ -74,57 +74,92 @@ server.listen(PORT,()=>console.log('wstcp on '+PORT+' -> rfb '+RFB));
 JEOF
 
 echo "== audio relay =="
-cat > /opt/relay/server.js << 'JEOF'
+cat > /opt/relay/server.js << 'RELAYEOF'
 const http=require('http'),WebSocket=require('ws');
 const {spawn}=require('child_process');
 const PORT=Number(process.env.PORT||6902);
 const VNC=process.env.VNC_URL||'';
-const PAGE='<!doctype html><html><head><meta charset="utf-8"><title>DDNet Remote</title>'+
-'<style>html,body{margin:0;height:100%;background:#000;overflow:hidden}#stage{position:fixed;inset:0}'+
-'iframe{width:100%;height:100%;border:0}#ctl{position:fixed;left:10px;bottom:10px;z-index:99;display:flex;gap:8px;align-items:center}'+
-'button{background:#3b82f6;color:#fff;border:0;padding:10px 16px;border-radius:6px;font-size:14px;cursor:pointer}'+
-'#st{color:#9ca3af;margin-left:4px;font:12px monospace;line-height:38px}</style></head><body>'+
-'<div id="stage"><iframe id="g" src="@@SRC@@"></iframe></div>'+
-'<div id="ctl"><button id="s">Play sound</button><span id="st"></span><button id="f">Fullscreen</button></div>'+
-'<script>var ws,ctx,playing=false,buf=new Int16Array(0);'+
-'function push(u8){var s16=new Int16Array(u8.buffer,u8.byteOffset,u8.length>>1);var t=new Int16Array(buf.length+s16.length);t.set(buf);t.set(s16,buf.length);buf=t;}'+
-'function link(){var proto=location.protocol==="https:"?"wss://":"ws://";ws=new WebSocket(proto+location.host);ws.binaryType="arraybuffer";'+
-'ws.onmessage=function(ev){push(new Uint8Array(ev.data));};ws.onclose=function(){setTimeout(link,2000);};}'+
-'function startSound(){if(playing)return;ctx=new(window.AudioContext||window.webkitAudioContext)({sampleRate:44100});'+
-'var proc=ctx.createScriptProcessor(4096,0,2);'+
-'proc.onaudioprocess=function(e){var o=e.outputBuffer,l=o.getChannelData(0),r=o.getChannelData(1);'+
-'var n=o.length*2,m=Math.min(buf.length,n);for(var j=0,i=0;i+1<m;i+=2,j++){l[j]=buf[i]/32768;r[j]=buf[i+1]/32768;}'+
-'if(m<n){l.fill(0,m>>1);r.fill(0,m>>1);}buf=buf.subarray(m);};'+
-'link();proc.connect(ctx.destination);ctx.resume();playing=true;document.getElementById("st").textContent="sound on";}'+
-'document.getElementById("s").onclick=startSound;'+
-'document.getElementById("f").onclick=function(){var g=document.getElementById("g");'+
-'if(document.fullscreenElement||document.webkitFullscreenElement){document.exitFullscreen&&document.exitFullscreen();document.webkitExitFullscreen&&document.webkitExitFullscreen();}'+
-'else{g.requestFullscreen?g.requestFullscreen():g.webkitRequestFullscreen&&g.webkitRequestFullscreen();}};'+
-'</script></body></html>';
-const env=Object.assign({},process.env,{PULSE_SERVER:'unix:/tmp/psock'});
-function derive(host){
-  if(!host)return '';
-  if(/-?\d+\.app\.github\.dev$/.test(host))
-    return 'https://'+host.replace(/-\d+\.app\.github\.dev$/,'-6901.app.github.dev')+'/?autoconnect=true&resize=scale';
-  return '';
+const PAGE=`<!doctype html><html><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>game-stream</title>
+<style>html,body{margin:0;height:100%;background:#000;overflow:hidden;touch-action:none}
+#stage{position:fixed;inset:0}
+iframe{width:100%;height:100%;border:0;display:block;background:#000}
+#ctl{position:fixed;left:calc(10px + env(safe-area-inset-left));bottom:calc(10px + env(safe-area-inset-bottom));z-index:99;display:flex;gap:8px;align-items:center;flex-wrap:wrap;transition:opacity .2s}
+button{background:#3b82f6;color:#fff;border:0;padding:11px 16px;border-radius:8px;font-size:14px;cursor:pointer}
+button:active{transform:scale(.96)}
+#st{color:#9ca3af;margin-left:4px;font:12px monospace;line-height:38px}
+#hide{position:fixed;right:calc(10px + env(safe-area-inset-right));top:calc(10px + env(safe-area-inset-top));z-index:100;
+background:rgba(11,15,20,.55);color:#e5e7eb;border:1px solid rgba(255,255,255,.25);padding:7px 10px;border-radius:8px;font-size:12px;cursor:pointer;backdrop-filter:blur(3px)}
+#hide:hover{background:rgba(11,15,20,.8)}
+body.hid #ctl{opacity:0;pointer-events:none}
+body.hid:hover #ctl{opacity:1;pointer-events:auto}
+@media (orientation:landscape) and (max-height:560px){
+  button{padding:6px 9px;font-size:11px;border-radius:6px}
+  #st{font-size:10px;line-height:30px}
+  #hide{padding:4px 7px;font-size:11px}
+}</style></head><body>
+<div id="stage"><iframe id="g"></iframe></div>
+<button id="hide">⋯</button>
+<div id="ctl"><button id="f">Fullscreen</button><button id="s">Play sound</button><span id="st"></span></div>
+<script>
+var D=parseInt((location.search.match(/[?&]d=(\\d+)/)||[])[1]||"300",10);if(D<250)D=250;if(D>5000)D=5000;
+var CAP=44100*90,ring=new Int16Array(CAP),tail=0,head=0,cnt=0,gate=false,ctx,ws,wsc=false,playing=false,started=false;
+var START=Math.floor(D/1000*44100),HOLD=Math.floor(START/3);
+function vncUrl(){
+  var base=VNC||"";
+  if(base){
+    if(base.indexOf('?')>=0)return base+'&autoconnect=true&resize=scale&reconnect=1&show_dot=true';
+    return base+'?autoconnect=true&resize=scale&reconnect=1&show_dot=true';
+  }
+  var h=location.host;
+  if(/-?\\d+\\.app\\.github\\.dev$/.test(h)){
+    return "https://"+h.replace(/-\\d+\\.app\\.github\\.dev$/,"-6901.app.github.dev")+"?autoconnect=true&resize=scale&reconnect=1&show_dot=true";
+  }
+  return location.protocol+"//"+location.host.replace(/:(\\d+)/,":6901")+"?autoconnect=true&resize=scale&reconnect=1&show_dot=true";
 }
-const server=http.createServer((q,res)=>{
-  res.setHeader('Content-Type','text/html; charset=utf-8');
-  let src=VNC?VNC+'/?autoconnect=true&resize=scale':derive(q.headers.host||'');
-  res.end(PAGE.replace('@@SRC@@',src.replace(/\&/g,'&amp;')));
-});
+document.getElementById('g').src=vncUrl();
+function wr(b){var n=b.length,w=(tail+n)%CAP;if(w>tail){ring.set(b,tail);}else{var p=CAP-tail;ring.set(b.subarray(0,p),tail);ring.set(b.subarray(p),0);}tail=w;cnt+=n;if(cnt>CAP)cnt=CAP;}
+function push(u8){wr(new Int16Array(u8.buffer,u8.byteOffset,u8.length>>1));}
+function link(){if(ws&&wsc)return;var proto=location.protocol==="https:"?"wss://":"ws://";ws=new WebSocket(proto+location.host);ws.binaryType="arraybuffer";ws.onopen=function(){wsc=true;};ws.onmessage=function(ev){push(new Uint8Array(ev.data));};ws.onclose=function(){wsc=false;setTimeout(link,1500);};ws.onerror=function(){};}
+function zero(o){var n=o.length,l=o.getChannelData(0),r=o.getChannelData(1);for(var i=0;i<n;i++){l[i]=0;r[i]=0;}}
+function start(){if(playing)return;playing=true;ctx=new(window.AudioContext||window.webkitAudioContext)({sampleRate:44100,latencyHint:"interactive"});
+var proc=ctx.createScriptProcessor(4096,0,2);
+proc.onaudioprocess=function(e){var o=e.outputBuffer,n=o.length,cur=cnt>>1;
+if(gate){if(cur<HOLD){gate=false;document.getElementById("st").textContent="buffering…";zero(o);return;}}else{if(cur>=START){gate=true;document.getElementById("st").textContent="sound on (delay "+D+"ms)";}else{zero(o);return;}}
+var l=o.getChannelData(0),r=o.getChannelData(1),need=n*2,h=head,take=Math.min(need,cnt);
+var end=h+take,k=0;
+if(end<=CAP){for(var i=h;i<end;i+=2){l[k]=ring[i]/32768;r[k]=ring[i+1]/32768;k++;}}
+else{for(var j=h;j<CAP;j+=2){l[k]=ring[j]/32768;r[k]=ring[j+1]/32768;k++;}for(var j2=0;j2<end-CAP;j2+=2){l[k]=ring[j2]/32768;r[k]=ring[j2+1]/32768;k++;}}
+while(k<n){l[k]=0;r[k]=0;k++;}
+head=(head+take)%CAP;cnt-=take;};
+proc.connect(ctx.destination);ctx.resume();link();document.getElementById("st").textContent="sound on";}
+document.getElementById("s").onclick=start;
+function goFS(){
+  var g=document.getElementById("g");
+  try{
+    if(window.top!==window.self){window.parent.postMessage('@fs','*');return;}
+    var req=g.requestFullscreen||g.webkitRequestFullscreen;
+    if(req)req.call(g);
+    try{if(screen.orientation&&screen.orientation.lock)screen.orientation.lock('landscape').catch(function(){});}catch(e){}
+  }catch(e){}
+}
+document.getElementById("f").onclick=goFS;
+document.getElementById("hide").onclick=function(){document.body.classList.toggle('hid');};
+</script></body></html>`;
+const server=http.createServer((q,res)=>{res.setHeader('Content-Type','text/html; charset=utf-8');res.end(PAGE);});
 const wss=new WebSocket.Server({server});
+const env=Object.assign({},process.env,{PULSE_SERVER:process.env.PSO||'unix:/tmp/psock'});
 function pspawn(){
   const p=spawn('parec',['--device=gamestream.monitor','--format=s16le','--channels=2','--rate=44100'],{env});
   p.stdout.on('data',d=>{for(const w of wss.clients)if(w.readyState===1)w.send(d);});
-  p.stderr.on('data',d=>console.log('parec:',d.toString().trim()));
-  p.on('error',e=>console.log('parec err',e.message));
-  p.on('exit',c=>{console.log('parec exited',c,'-> respawn');setTimeout(pspawn,3000);});
+  p.stderr.on('data',d=>{});
+  p.on('error',()=>{});
+  p.on('exit',()=>{setTimeout(pspawn,3000);});
 }
 server.on('error',e=>console.log('srv err',e.message));
 server.listen(PORT,()=>{console.log('relay on '+PORT+' vnc='+(VNC||'auto'));pspawn();});
-JEOF
-
+RELAYEOF
 echo "== Xvnc + wstcp =="
 pkill -9 Xvnc 2>/dev/null || true
 sleep 2
