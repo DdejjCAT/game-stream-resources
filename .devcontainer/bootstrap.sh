@@ -10,10 +10,10 @@ sudo apt-get install -y -qq x11-utils xauth imagemagick libvulkan1 mesa-vulkan-d
   xdotool openbox pulseaudio pulseaudio-utils wget curl unzip jq libxfont2 libnotify4 \
   libsdl2-2.0-0 libsdl2-mixer-2.0-0 libfreetype6 net-tools >/dev/null 2>&1
 
-echo "== kasmvnc (Xvnc) =="
-wget -q -O /tmp/kasmvnc.deb https://github.com/kasmtech/KasmVNC/releases/download/v1.5.0/kasmvncserver_jammy_1.5.0_amd64.deb
-sudo apt-get install -y -qq /tmp/kasmvnc.deb >/tmp/aptkasm.log 2>&1 || { echo "kasm install FAILED"; tail -5 /tmp/aptkasm.log; }
-command -v Xvnc || echo "WARN Xvnc missing"
+echo "== x11vnc + xvfb (X display + RFB server) =="
+sudo apt-get install -y -qq xvfb x11vnc >/dev/null 2>&1
+command -v x11vnc || echo "WARN x11vnc missing"
+command -v Xvfb || echo "WARN Xvfb missing"
 
 echo "== pulse (rootless, /tmp/psock) =="
 sudo mkdir -p /etc/pulse
