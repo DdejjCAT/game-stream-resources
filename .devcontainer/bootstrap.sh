@@ -40,6 +40,176 @@ mkdir -p /opt/wstcp /opt/relay
 cd /opt/wstcp && npm install ws --silent >/dev/null 2>&1
 cp -r /opt/wstcp/node_modules /opt/relay/node_modules
 
+echo "== guacamole (guacd build + guacamole-lite) =="
+# сборка guacd из исходников в фоне (guacd в apt нет, только libguac-dev)
+if [ ! -x /usr/local/sbin/guacd ]; then
+  echo "building guacd in background..."
+  setsid nohup bash -c '
+    exec > /tmp/guacd_build.log 2>&1
+    set -e
+    export DEBIAN_FRONTEND=noninteractive
+    sudo apt-get install -y -qq build-essential autoconf automake libtool pkg-config \
+      libcairo2-dev libpng-dev libjpeg-turbo8-dev libvncserver-dev libssl-dev \
+      libossp-uuid-dev libpango1.0-dev libwebsockets-dev >/dev/null 2>&1
+    cd /tmp
+    rm -rf guacamole-server
+    git clone --depth 1 --branch v1.5.5 https://github.com/apache/guacamole-server.git >/dev/null 2>&1
+    cd guacamole-server
+    autoreconf -fi >/dev/null 2>&1
+    ./configure --disable-static --with-init-dir=no >/dev/null 2>&1
+    make -j2 >/dev/null 2>&1
+    sudo make install >/dev/null 2>&1
+    sudo ldconfig
+    echo GUACD-BUILD-DONE
+  ' >/dev/null 2>&1 &
+fi
+mkdir -p /opt/guac
+cd /opt/guac && npm install --silent guacamole-lite@1.2.0 >/dev/null 2>&1
+cd /opt/guac && npm install --silent guacamole-common-js@1.5.0 >/dev/null 2>&1
+if [ -f node_modules/guacamole-common-js/dist/cjs/guacamole-common.js ]; then
+  cp node_modules/guacamole-common-js/dist/cjs/guacamole-common.js /opt/guac/guacjs.js
+fi
+
+echo "== guacamole run.js (tunnel) =="
+cat > /opt/guac/run.js << 'GUACEOR'
+const http=require('http'),fs=require('fs'),path=require('path');
+const GuacamoleLite=require('guacamole-lite');
+const PORT=Number(process.env.PORT||6941);
+const RFB=Number(process.env.RFB||5918);
+const ROOT='/opt/guac';
+const CLOG='/tmp/clog.log';
+function clog(m){try{fs.appendFileSync(CLOG,new Date().toISOString()+' '+m+'\n');}catch(_){}}
+const MIME={'.html':'text/html','.js':'text/javascript','.css':'text/css','.png':'image/png','.svg':'image/svg+xml','.json':'application/json','.woff2':'font/woff2'};
+let cur={};
+const httpServer=http.createServer((req,res)=>{
+  const u=(req.url||'/').split('?')[0];
+  if(u==='/clog'&&req.method==='POST'){let b='';req.on('data',d=>b+=d);req.on('end',()=>{clog('GUACCL '+String(b).slice(0,500));res.writeHead(200,{'Content-Type':'text/plain'});res.end('ok');});return;}
+  if(u==='/clog'){res.writeHead(200,{'Content-Type':'text/plain'});res.end(JSON.stringify(cur)||'{}');return;}
+  let f;
+  if(u==='/')f=path.join(ROOT,'guac.html');
+  else f=path.normalize(path.join(ROOT,u));
+  if(!f.startsWith(ROOT)){res.writeHead(403);res.end();return;}
+  fs.readFile(f,(e,d)=>{if(e){res.writeHead(404);res.end('nf');return;}
+    res.writeHead(200,{'Content-Type':MIME[path.extname(f)]||'application/octet-stream'});res.end(d);});
+});
+const guacdOptions={host:'127.0.0.1',port:4822};
+const clientOptions={
+  crypt:{cypher:'AES-256-CBC',key:'MySuperSecretKeyForParamsToken12'},
+  log:{level:1,stdLog:(m)=>{cur.l=m.split('\n')[0];clog('GUAC '+String(m).slice(0,300));},errorLog:(m)=>clog('GUAC-ERR '+String(m).slice(0,300))},
+  allowReconnect:true,
+  maxInactivityTime:0,
+  connectionDefaultSettings:{vnc:{port:'5918',width:1280,height:720,dpi:96}}
+};
+const callbacks={processConnectionSettings:(s,cb)=>{cur.s=JSON.stringify(s).slice(0,200);clog('SESS '+cur.s);cb(undefined,s);}};
+try{
+  new GuacamoleLite({server:httpServer},guacdOptions,clientOptions,callbacks);
+  clog('guac tunnel init on '+PORT);
+}catch(e){clog('GUAC INIT FAIL '+e.message);}
+httpServer.listen(PORT,()=>{clog('guac tunnel http on '+PORT);cur.up=true;console.log('guac on '+PORT);});
+GUACEOR
+
+echo "== guacamole client page =="
+cat > /opt/guac/guac.html << 'GUACHTMLE'
+<!doctype html><html><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>guacamole</title>
+<style>html,body{margin:0;height:100%;background:#000;overflow:hidden;touch-action:none;font-family:system-ui,sans-serif}
+#host{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:#000}
+#st{position:fixed;top:calc(8px + env(safe-area-inset-top));left:calc(8px + env(safe-area-inset-left));z-index:9;color:#94a3b8;font:12px monospace;background:rgba(0,0,0,.55);padding:6px 9px;border-radius:8px;max-width:78vw;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#kb{position:fixed;left:0;right:0;bottom:0;z-index:8;display:none;flex-wrap:wrap;justify-content:center;gap:6px;padding:8px calc(6px + env(safe-area-inset-right)) calc(8px + env(safe-area-inset-bottom)) calc(6px + env(safe-area-inset-left));background:rgba(10,14,20,.86);backdrop-filter:blur(4px);border-top:1px solid rgba(255,255,255,.14)}
+#kb button{min-width:44px;min-height:40px;padding:4px 10px;background:#1f2a37;border:1px solid rgba(255,255,255,.16);color:#e5e7eb;border-radius:7px;font-size:16px}
+#kb button.w{background:#3b82f6}
+#kb button:active{transform:scale(.93);background:#2a6bd6}
+body.kb #kb{display:flex}
+body.kb #host{bottom:46%}
+#hide{position:fixed;right:calc(10px + env(safe-area-inset-right));top:calc(10px + env(safe-area-inset-top));z-index:10;background:rgba(11,15,20,.6);color:#e5e7eb;border:1px solid rgba(255,255,255,.25);padding:8px 11px;border-radius:8px;font-size:13px;cursor:pointer;backdrop-filter:blur(3px)}
+</style></head><body>
+<div id="host"></div>
+<div id="st">connect…</div>
+<button id="hide">⌨</button>
+<div id="kb"></div>
+<script>
+window.module={exports:{}};
+var module=window.module,exports=module.exports;
+</script>
+<script src="/guacjs.js"></script>
+<script>
+var Guacamole=window.module.exports;
+var KEY='MySuperSecretKeyForParamsToken12';
+var st=document.getElementById('st');
+function log(m){st.textContent=m;}
+function b64(u8){var s='';for(var i=0;i<u8.length;i++)s+=String.fromCharCode(u8[i]);return btoa(s);}
+async function makeToken(){
+  var payload={connection:{type:'vnc',settings:{hostname:'127.0.0.1',port:String(RFB)}}};
+  var enc=new TextEncoder(),iv=crypto.getRandomValues(new Uint8Array(16));
+  var key=await crypto.subtle.importKey('raw',enc.encode(KEY),{name:'AES-CBC'},false,['encrypt']);
+  var ct=await crypto.subtle.encrypt({name:'AES-CBC',iv:iv},key,enc.encode(JSON.stringify(payload)));
+  var data={iv:b64(iv),value:b64(new Uint8Array(ct))};
+  return b64(enc.encode(JSON.stringify(data)));
+}
+var RFB=parseInt((location.search.match(/[?&]rfb=(\d+)/)||[])[1]||'5918',10);
+var host=document.getElementById('host');
+var client=null,tunnel=null,keyboard=null;
+async function connect(){
+  log('making token…');
+  var token=await makeToken();
+  tunnel=new Guacamole.WebSocketTunnel('/tunnel');
+  client=new Guacamole.Client(tunnel);
+  client.onerror=function(s){log('ERR '+s.code+' '+s.message);fetch('/clog',{method:'POST',body:'guac err '+(s.code||'')+' '+(s.message||'')});};
+  client.onstatechange=function(s){log('state '+s);fetch('/clog',{method:'POST',body:'guac state '+s});};
+  client.onname=function(n){log(n);};
+var display=client.getDisplay();
+  var el=display.getElement();
+  host.appendChild(el);
+  var pressed=false;
+  function cd(pointer){
+    var r=el.getBoundingClientRect();
+    var dw=display.getWidth()||1280,dh=display.getHeight()||720;
+    return {x:Math.round((pointer.clientX-r.left)/r.width*dw),y:Math.round((pointer.clientY-r.top)/r.height*dh)};
+  }
+  function sendMouse(x,y,left){
+    try{client.sendMouseState(new Guacamole.Mouse.State(x,y,left,false,false,false,false));}catch(e){}
+  }
+  el.style.touchAction='none';
+  el.addEventListener('pointerdown',function(e){e.preventDefault();pressed=true;try{el.setPointerCapture(e.pointerId);}catch(_){}var p=cd(e);sendMouse(p.x,p.y,true);log('pdn '+p.x+' '+p.y);});
+  el.addEventListener('pointermove',function(e){var p=cd(e);sendMouse(p.x,p.y,pressed);});
+  el.addEventListener('pointerup',function(e){e.preventDefault();pressed=false;var p=cd(e);sendMouse(p.x,p.y,false);});
+  el.addEventListener('pointercancel',function(){pressed=false;});
+  keyboard=new Guacamole.Keyboard(document);
+  keyboard.onkeydown=function(keysym){client.sendKeyEvent(1,keysym);if(delayedReset)clearTimeout(delayedReset),delayedReset=setTimeout(function(){keyboard.reset();},100);};
+  keyboard.onkeyup=function(keysym){client.sendKeyEvent(0,keysym);};
+  var delayedReset=null;
+  function fit(){
+    var w=host.clientWidth,h=host.clientHeight;
+    var dw=display.getWidth(),dh=display.getHeight();
+    if(!dw||!dh||!w||!h)return;
+    try{display.scale(Math.min(w/dw,h/dh));}catch(e){}
+  }
+  window.addEventListener('resize',fit);
+  setInterval(fit,600);
+  log('connect…');
+  client.connect('token='+encodeURIComponent(token));
+}
+function key(name){var ev=new KeyboardEvent('keydown',{key:name,bubbles:true,cancelable:true});document.dispatchEvent(ev);setTimeout(function(){var ev2=new KeyboardEvent('keyup',{key:name,bubbles:true,cancelable:true});document.dispatchEvent(ev2);},60);}
+function buildKB(){
+  var kb=document.getElementById('kb');
+  var rows=['1234567890','qwertyuiop','asdfghjkl','zxcvbnm@.'];
+  rows.forEach(function(r){var d=document.createElement('div');d.style.cssText='display:flex;gap:6px;justify-content:center;width:100%';
+    Array.from(r).forEach(function(c){var b=document.createElement('button');b.textContent=c;b.onmousedown=function(e){e.preventDefault();key(c);};d.appendChild(b);});kb.appendChild(d);});
+  var row2=document.createElement('div');row2.style.cssText='display:flex;gap:6px;justify-content:center;width:100%';
+  var sp=document.createElement('button');sp.style.cssText='min-width:120px';sp.textContent='spc';sp.onmousedown=function(e){e.preventDefault();key(' ');};
+  var en=document.createElement('button');en.className='w';en.textContent='⏎';en.onmousedown=function(e){e.preventDefault();key('Enter');};
+  var bs=document.createElement('button');bs.className='w';bs.textContent='⌫';bs.onmousedown=function(e){e.preventDefault();key('Backspace');};
+  row2.appendChild(sp);row2.appendChild(en);row2.appendChild(bs);kb.appendChild(row2);
+}
+document.getElementById('hide').onclick=function(){document.body.classList.toggle('kb');};
+buildKB();
+connect();
+</script></body></html>
+GUACHTMLE
+
+echo "GUACD-BOOTSTRAP-DONE"
+
 echo "== wstcp proxy =="
 cat > /opt/wstcp/proxy.js << 'JEOF'
 const http=require('http'),fs=require('fs'),path=require('path'),net=require('net');
