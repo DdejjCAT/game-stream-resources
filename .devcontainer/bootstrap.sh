@@ -320,7 +320,7 @@ var D=parseInt((location.search.match(/[?&]d=(\\d+)/)||[])[1]||"300",10);if(D<25
 var CAP=44100*90,ring=new Int16Array(CAP),tail=0,head=0,cnt=0,gate=false,ctx,ws,wsc=false,playing=false,started=false;
 var START=Math.floor(D/1000*44100),HOLD=Math.floor(START/3);
 function vncUrl(){
-  var base=VNC||"";
+  var base="{{VNC}}"||"";
   if(base){
     if(base.indexOf('?')>=0)return base+'&autoconnect=true&resize=scale&reconnect=1&show_dot=true';
     return base+'?autoconnect=true&resize=scale&reconnect=1&show_dot=true';
@@ -360,8 +360,8 @@ function goFS(){
 document.getElementById("f").onclick=goFS;
 document.getElementById("hide").onclick=function(){document.body.classList.toggle('hid');};
 </script></body></html>`;
-const server=http.createServer((q,res)=>{res.setHeader('Content-Type','text/html; charset=utf-8');res.end(PAGE);});
-const wss=new WebSocket.Server({server});
+const server2=http.createServer((q,res)=>{res.setHeader('Content-Type','text/html; charset=utf-8');res.end(PAGE.split("{{VNC}}").join(VNC));});
+const wss=new WebSocket.Server({server:server2});
 const env=Object.assign({},process.env,{PULSE_SERVER:process.env.PSO||'unix:/tmp/psock'});
 function pspawn(){
   const p=spawn('parec',['--device=gamestream.monitor','--format=s16le','--channels=2','--rate=44100'],{env});
@@ -370,8 +370,8 @@ function pspawn(){
   p.on('error',()=>{});
   p.on('exit',()=>{setTimeout(pspawn,3000);});
 }
-server.on('error',e=>console.log('srv err',e.message));
-server.listen(PORT,()=>{console.log('relay on '+PORT+' vnc='+(VNC||'auto'));pspawn();});
+server2.on('error',e=>console.log('srv err',e.message));
+server2.listen(PORT,()=>{console.log('relay on '+PORT+' vnc='+(VNC||'auto'));pspawn();});
 RELAYEOF
 echo "== Xvnc + wstcp =="
 pkill -9 Xvnc 2>/dev/null || true
