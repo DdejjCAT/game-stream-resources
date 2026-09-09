@@ -15,6 +15,34 @@ sudo apt-get install -y -qq xvfb x11vnc >/dev/null 2>&1
 command -v x11vnc || echo "WARN x11vnc missing"
 command -v Xvfb || echo "WARN Xvfb missing"
 
+echo "== KasmVNC (Xvnc, веб-клиент слота — каждый слот = свой websocket 6911+slot) =="
+KASM_DEB=/tmp/kasmvnc.deb
+KASM_OS=$(grep -oE 'VERSION_ID="[0-9.]+"' /etc/os-release | grep -oE '[0-9.]+')
+if [ ! -x /usr/bin/Xvnc ] || ! strings /usr/bin/Xvnc 2>/dev/null | grep -qi kasm; then
+  case "$KASM_OS" in
+    24.04) KASM_REL=noble;; 22.04) KASM_REL=jammy;; 20.04) KASM_REL=focal;; *) KASM_REL=jammy;;
+  esac
+  for dl in 1 2 3 4 5; do
+    curl -sSL -o $KASM_DEB https://github.com/kasmtech/KasmVNC/releases/download/v1.5.0/kasmvncserver_${KASM_REL}_1.5.0_amd64.deb && break
+    sleep 3
+  done
+  if [ ! -f $KASM_DEB ]; then echo "KASM-DL-FAIL"; fi
+  for it in 1 2 3 4 5 6 7 8; do
+    sudo -n apt-get install -y -qq -o DPkg::Lock::Timeout=120 -f >/dev/null 2>&1 || true
+    sudo -n apt-get install -y -qq -o DPkg::Lock::Timeout=120 "$KASM_DEB" >/dev/null 2>&1 && break
+    sudo -n dpkg --configure -a >/dev/null 2>&1 || true
+    [ "$it" = 4 ] && sudo apt-get update -qq >/dev/null 2>&1 || true
+    sleep 10
+  done
+  rm -f $KASM_DEB
+fi
+if [ -x /usr/bin/Xvnc ] && strings /usr/bin/Xvnc 2>/dev/null | grep -qi kasm; then
+  echo "kasmvnc ready"
+else
+  echo "KASM-INSTALL-FAIL"
+  which Xvnc || ls -la /usr/bin/Xvnc 2>/dev/null
+fi
+
 echo "== pulse (rootless, /tmp/psock) =="
 sudo mkdir -p /etc/pulse
 sudo tee /etc/pulse/gamestream.pa >/dev/null << 'PEOF'
@@ -63,16 +91,15 @@ if [ ! -x /usr/local/sbin/guacd ]; then
     echo GUACD-BUILD-DONE
   ' >/dev/null 2>&1 &
 fi
-# ждём, пока guacd соберётся и станет доступен, иначе guac-стек недоступен
-for w in $(seq 1 240); do
+# ждём guacd недолго (сборка идёт в фоне; для jackbox guac опционален)
+for w in $(seq 1 24); do
   [ -x /usr/local/sbin/guacd ] && grep -q GUACD-BUILD-DONE /tmp/guacd_build.log 2>/dev/null && break
   sleep 5
 done
 if [ -x /usr/local/sbin/guacd ]; then
   echo "guacd ready: $(/usr/local/sbin/guacd --version 2>/dev/null | head -3 | tr '\n' ' ')"
 else
-  echo "WARN guacd build failed, tail:"
-  tail -20 /tmp/guacd_build.log 2>/dev/null
+  echo "WARN guacd still building/absent (не блокирует старт стека)"
 fi
 mkdir -p /opt/guac
 cd /opt/guac && npm install --silent guacamole-lite@1.2.0 >/dev/null 2>&1
