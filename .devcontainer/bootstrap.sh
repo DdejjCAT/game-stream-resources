@@ -16,6 +16,11 @@ command -v x11vnc || echo "WARN x11vnc missing"
 command -v Xvfb || echo "WARN Xvfb missing"
 
 echo "== KasmVNC (Xvnc, веб-клиент слота — каждый слот = свой websocket 6911+slot) =="
+# сохраняем оригинальный Xvnc ДО установки kasm (он подменяет /usr/bin/Xvnc, а DDNet :99 использует -noWebsocket)
+if [ -x /usr/bin/Xvnc ] && ! (strings /usr/bin/Xvnc 2>/dev/null | grep -qi kasm); then
+  cp /usr/bin/Xvnc /usr/local/bin/xvnc-classic 2>/dev/null && chmod +x /usr/local/bin/xvnc-classic
+  echo "saved classic Xvnc -> /usr/local/bin/xvnc-classic"
+fi
 KASM_DEB=/tmp/kasmvnc.deb
 KASM_OS=$(grep -oE 'VERSION_ID="[0-9.]+"' /etc/os-release | grep -oE '[0-9.]+')
 if [ ! -x /usr/bin/Xvnc ] || ! strings /usr/bin/Xvnc 2>/dev/null | grep -qi kasm; then
@@ -372,7 +377,8 @@ echo "== Xvnc + wstcp =="
 pkill -9 Xvnc 2>/dev/null || true
 sleep 2
 rm -f /tmp/.X99-lock /tmp/.X11-unix/X99
-setsid nohup Xvnc :99 -geometry 640x480 -depth 24 -rfbport 5917 -noWebsocket -SecurityTypes None -alwaysshared >/tmp/xvnc.log 2>&1 &
+VNCBIN=/usr/local/bin/xvnc-classic; [ -x "$VNCBIN" ] || VNCBIN=Xvnc
+setsid nohup "$VNCBIN" :99 -geometry 640x480 -depth 24 -rfbport 5917 -noWebsocket -SecurityTypes None -alwaysshared >/tmp/xvnc.log 2>&1 &
 sleep 8
 setsid nohup env PORT=6901 RFB=5917 node /opt/wstcp/proxy.js >/tmp/wstcp.log 2>&1 &
 
