@@ -1,0 +1,93 @@
+{
+ "dockerfile": "../Dockerfile",
+ "forwardPorts": [
+  5917,
+  6901,
+  6911,
+  6912,
+  6913,
+  6914,
+  6915,
+  6931,
+  6932,
+  6933,
+  6934,
+  6935,
+  6941,
+  6942,
+  6943,
+  6944,
+  6945
+ ],
+ "portsAttributes": {
+  "5917": {
+   "label": "VNC RFB",
+   "visibility": "public"
+  },
+  "6901": {
+   "label": "noVNC video",
+   "visibility": "public"
+  },
+  "6911": {
+   "label": "JB WSTCP slot1",
+   "visibility": "public"
+  },
+  "6912": {
+   "label": "JB WSTCP slot2",
+   "visibility": "public"
+  },
+  "6913": {
+   "label": "JB WSTCP slot3",
+   "visibility": "public"
+  },
+  "6914": {
+   "label": "JB WSTCP slot4",
+   "visibility": "public"
+  },
+  "6915": {
+   "label": "JB WSTCP slot5",
+   "visibility": "public"
+  },
+  "6931": {
+   "label": "JB relay slot1",
+   "visibility": "public"
+  },
+  "6932": {
+   "label": "JB relay slot2",
+   "visibility": "public"
+  },
+  "6933": {
+   "label": "JB relay slot3",
+   "visibility": "public"
+  },
+  "6934": {
+   "label": "JB relay slot4",
+   "visibility": "public"
+  },
+  "6935": {
+   "label": "JB relay slot5",
+   "visibility": "public"
+  },
+  "6941": {
+   "label": "JB GUAC slot1",
+   "visibility": "public"
+  },
+  "6942": {
+   "label": "JB GUAC slot2",
+   "visibility": "public"
+  },
+  "6943": {
+   "label": "JB GUAC slot3",
+   "visibility": "public"
+  },
+  "6944": {
+   "label": "JB GUAC slot4",
+   "visibility": "public"
+  },
+  "6945": {
+   "label": "JB GUAC slot5",
+   "visibility": "public"
+  }
+ },
+ "postCreateCommand": "bash ./.devcontainer/bootstrap.jps.sh"
+}
