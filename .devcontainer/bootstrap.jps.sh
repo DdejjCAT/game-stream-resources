@@ -263,6 +263,11 @@ const VNC=process.env.VNC_URL||'';
 http.createServer((q,res)=>{res.writeHead(200,{'Content-Type':'text/plain'});res.end('relay template — провижен перезапишет');}).listen(PORT,()=>console.log('relay template on '+PORT));
 RELAYEOF
 
+echo "== старт wstcp 6901 (видео-канал для relay-страницы -> x11vnc 5918 слота 0) =="
+pkill -9 -f '/opt/wstcp/proxy.js' 2>/dev/null || true
+sleep 1
+setsid nohup env PORT=6901 RFB=5918 node /opt/wstcp/proxy.js >/tmp/wstcp.log 2>&1 &
+
 echo "== openbox (появится на дисплее слота после запуска Xvnc) =="
 command -v openbox || echo "WARN openbox missing"
 
