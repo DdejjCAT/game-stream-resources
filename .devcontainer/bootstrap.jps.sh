@@ -30,7 +30,8 @@ if [ ! -x /usr/bin/Xvnc ] || ! strings /usr/bin/Xvnc 2>/dev/null | grep -qi kasm
   done
   if [ ! -f $KASM_DEB ]; then echo "KASM-DL-FAIL"; fi
   for it in 1 2 3 4 5 6 7 8; do
-    sudo -n apt-get install -y -qq -o DPkg::Lock::Timeout=120 ./$KASM_DEB >/dev/null 2>&1 && break
+    sudo -n apt-get install -y -qq -o DPkg::Lock::Timeout=120 -f >/dev/null 2>&1 || true
+    sudo -n apt-get install -y -qq -o DPkg::Lock::Timeout=120 "$KASM_DEB" >/dev/null 2>&1 && break
     sudo -n dpkg --configure -a >/dev/null 2>&1 || true
     [ "$it" = 4 ] && sudo apt-get update -qq >/dev/null 2>&1 || true
     sleep 10
