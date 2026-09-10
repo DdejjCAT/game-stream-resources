@@ -10,10 +10,23 @@ H=/home/codespace
 
 echo "== docker check =="
 docker --version 2>&1 | head -1 || echo NO-DOCKER
-command -v docker || sudo apt-get install -y -qq docker.io >/dev/null 2>&1 || echo DOCKER-INSTALL-FAIL
+if ! command -v docker >/dev/null 2>&1; then
+  sudo apt-get update >/dev/null 2>&1
+  sudo apt-get install -y -qq docker.io >/dev/null 2>&1 || echo DOCKER-INSTALL-FAIL
+fi
+
+echo "== docker dataroot -> /tmp (большой диск, чтобы образ влез) =="
+sudo mkdir -p /tmp/docker-dataroot
+sudo sh -c 'printf "{\\\"data-root\\\": \\\"/tmp/docker-dataroot\\\"}\\n" > /etc/docker/daemon.json'
+# для контейнера docker.io рестарт через service; для codespaces может быть dockerd процесс
+service docker stop >/dev/null 2>&1 || true
+pkill dockerd 2>/dev/null; sleep 2
+service docker start >/dev/null 2>&1 || sudo dockerd >/dev/null 2>&1 || true
+sleep 3
+docker info --format '{{.DockerRootDir}}' 2>&1 | head -1
 
 echo "== port forwarding 6911 =="
-sudo dpkg -l docker.io >/dev/null 2>&1 && sudo systemctl start docker 2>/dev/null || true
+sudo systemctl start docker 2>/dev/null || true
 
 echo "== pull public image =="
 if timeout 600 sudo docker pull ghcr.io/ddejjcat/jps-docker/jps-portable-gac:latest; then
