@@ -2,15 +2,85 @@
   "dockerfile": "../Dockerfile",
   "forwardPorts": [
     6911,
-    6921
+    6921,
+    6931,
+    6941,
+    6912,
+    6922,
+    6932,
+    6942,
+    6913,
+    6923,
+    6933,
+    6943,
+    6914,
+    6924,
+    6934,
+    6944
   ],
   "portsAttributes": {
     "6911": {
-      "label": "JB Docker KasmVNC",
+      "label": "Slot0 6911",
+      "visibility": "public"
+    },
+    "6912": {
+      "label": "Slot1 6912",
+      "visibility": "public"
+    },
+    "6913": {
+      "label": "Slot2 6913",
+      "visibility": "public"
+    },
+    "6914": {
+      "label": "Slot3 6914",
       "visibility": "public"
     },
     "6921": {
-      "label": "JB Audio MP3",
+      "label": "Slot0 6921",
+      "visibility": "public"
+    },
+    "6922": {
+      "label": "Slot1 6922",
+      "visibility": "public"
+    },
+    "6923": {
+      "label": "Slot2 6923",
+      "visibility": "public"
+    },
+    "6924": {
+      "label": "Slot3 6924",
+      "visibility": "public"
+    },
+    "6931": {
+      "label": "Slot0 6931",
+      "visibility": "public"
+    },
+    "6932": {
+      "label": "Slot1 6932",
+      "visibility": "public"
+    },
+    "6933": {
+      "label": "Slot2 6933",
+      "visibility": "public"
+    },
+    "6934": {
+      "label": "Slot3 6934",
+      "visibility": "public"
+    },
+    "6941": {
+      "label": "Slot0 6941",
+      "visibility": "public"
+    },
+    "6942": {
+      "label": "Slot1 6942",
+      "visibility": "public"
+    },
+    "6943": {
+      "label": "Slot2 6943",
+      "visibility": "public"
+    },
+    "6944": {
+      "label": "Slot3 6944",
       "visibility": "public"
     }
   },
