@@ -15,15 +15,16 @@ if ! command -v docker >/dev/null 2>&1; then
   sudo apt-get install -y -qq docker.io >/dev/null 2>&1 || echo DOCKER-INSTALL-FAIL
 fi
 
-echo "== docker dataroot -> /tmp =="
-sudo mkdir -p /tmp/docker-dataroot
+echo "== docker dataroot -> /tmp (без containerd-snapshotter) =="
+sudo mkdir -p /tmp/docker-dataroot /etc/docker
+sudo sh -c 'printf "{\\"data-root\\": \\"/tmp/docker-dataroot\\", \\"features\\": {\\"containerd-snapshotter\\": false}}\\n" > /etc/docker/daemon.json'
 sudo pkill -9 dockerd 2>/dev/null; sleep 2
-sudo bash -c 'nohup dockerd --data-root /tmp/docker-dataroot --host unix:///var/run/docker.sock >/tmp/dockerd.log 2>&1 &'
+sudo bash -c 'nohup dockerd --config-file /etc/docker/daemon.json >/tmp/dockerd.log 2>&1 &'
 for i in $(seq 1 20); do
   docker info >/dev/null 2>&1 && break
   sleep 2
 done
-docker info --format 'ROOT={{.DockerRootDir}}' 2>&1 | head -1
+docker info --format 'ROOT={{.DockerRootDir}} STD={{.Driver}}' 2>&1 | head -1
 
 echo "== pull public image =="
 IMG=ghcr.io/ddejjcat/jps-docker/jps-portable-gac:latest
