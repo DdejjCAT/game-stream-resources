@@ -1,43 +1,47 @@
 #!/bin/bash
 # Jackbox через портативный docker-образ (game+KasmVNC на 6911).
-# Вместо обычной загрузки jackbox (part00/part01 -> AppImage -> extract) тянем публичный
-# образ с GHCR и запускаем контейнер, который сам умеет дисплей + KasmVNC + игру.
-# Любой порт 6911 наружу через codespaces port-forwarding.
+# Образ тянем с GHCR и запускаем контейнер, который сам умеет дисплей + KasmVNC + игру.
+# docker-данные кладём в /tmp (там 100+GB), т.к. системный диск 32GB не вмещает образ.
+[ -f /tmp/bootstrap.lock ] && exit 0
+touch /tmp/bootstrap.lock
 exec > /tmp/bootstrap.log 2>&1
 set -x
 export DEBIAN_FRONTEND=noninteractive
 H=/home/codespace
 
 echo "== docker check =="
-docker --version 2>&1 | head -1 || echo NO-DOCKER
 if ! command -v docker >/dev/null 2>&1; then
   sudo apt-get update >/dev/null 2>&1
   sudo apt-get install -y -qq docker.io >/dev/null 2>&1 || echo DOCKER-INSTALL-FAIL
 fi
 
-echo "== docker dataroot -> /tmp (большой диск, чтобы образ влез) =="
+echo "== docker dataroot -> /tmp =="
 sudo mkdir -p /tmp/docker-dataroot
-sudo sh -c 'printf "{\\\"data-root\\\": \\\"/tmp/docker-dataroot\\\"}\\n" > /etc/docker/daemon.json'
-# для контейнера docker.io рестарт через service; для codespaces может быть dockerd процесс
-service docker stop >/dev/null 2>&1 || true
-pkill dockerd 2>/dev/null; sleep 2
-service docker start >/dev/null 2>&1 || sudo dockerd >/dev/null 2>&1 || true
-sleep 3
-docker info --format '{{.DockerRootDir}}' 2>&1 | head -1
-
-echo "== port forwarding 6911 =="
-sudo systemctl start docker 2>/dev/null || true
+sudo pkill -9 dockerd 2>/dev/null; sleep 2
+sudo bash -c 'nohup dockerd --data-root /tmp/docker-dataroot --host unix:///var/run/docker.sock >/tmp/dockerd.log 2>&1 &'
+for i in $(seq 1 20); do
+  docker info >/dev/null 2>&1 && break
+  sleep 2
+done
+docker info --format 'ROOT={{.DockerRootDir}}' 2>&1 | head -1
 
 echo "== pull public image =="
-if timeout 600 sudo docker pull ghcr.io/ddejjcat/jps-docker/jps-portable-gac:latest; then
-  echo PULL-OK
-else
-  echo PULL-FAIL
-fi
+IMG=ghcr.io/ddejjcat/jps-docker/jps-portable-gac:latest
+PULLED=0
+for try in 1 2 3; do
+  if timeout 900 sudo docker pull "$IMG"; then
+    echo PULL-OK; PULLED=1; break
+  else
+    echo "PULL-FAIL-$try"
+    sudo docker system prune -af >/dev/null 2>&1
+    sleep 3
+  fi
+done
+[ "$PULLED" = "1" ] || echo NO-IMAGE-AFTER-RETRIES
 
 echo "== run container on :6911 =="
 sudo docker rm -f jps 2>/dev/null || true
-sudo docker run -d --name jps --restart unless-stopped -p 6911:6911 -p 6921:6912 ghcr.io/ddejjcat/jps-docker/jps-portable-gac:latest && echo RUNS-OK
+sudo docker run -d --name jps --restart unless-stopped -p 6911:6911 -p 6921:6912 "$IMG" && echo RUNS-OK
 sleep 8
 for i in $(seq 1 20); do
   code=$(curl -sk -o /dev/null -w '%{http_code}' http://127.0.0.1:6911/vnc.html 2>/dev/null)
@@ -45,8 +49,8 @@ for i in $(seq 1 20); do
   [ "$code" = "200" ] && break
   sleep 5
 done
-sudo docker logs jps 2>&1 | tail -3
+sudo docker logs jps 2>&1 | tail -8
 
 echo "JPS-DOCKER-STATE:"
-ss -tln | grep -oE ':6911 ' | head -1 || sudo ss -tln | grep -oE ':6911 ' | head -1 || echo NO-6911
+sudo ss -tln 2>/dev/null | grep -oE ':6911 ' | head -1 || echo NO-6911
 echo "STACK-UP-END"
