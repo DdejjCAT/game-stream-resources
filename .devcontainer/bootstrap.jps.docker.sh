@@ -24,7 +24,7 @@ fi
 
 echo "== run container on :6911 =="
 sudo docker rm -f jps 2>/dev/null || true
-sudo docker run -d --name jps --restart unless-stopped -p 6911:6911 ghcr.io/ddejjcat/jps-docker/jps-portable-gac:latest && echo RUNS-OK
+sudo docker run -d --name jps --restart unless-stopped -p 6911:6911 -p 6921:6912 ghcr.io/ddejjcat/jps-docker/jps-portable-gac:latest && echo RUNS-OK
 sleep 8
 for i in $(seq 1 20); do
   code=$(curl -sk -o /dev/null -w '%{http_code}' http://127.0.0.1:6911/vnc.html 2>/dev/null)
