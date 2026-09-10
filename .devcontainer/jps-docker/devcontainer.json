@@ -1,0 +1,11 @@
+{
+  "dockerfile": "../Dockerfile",
+  "forwardPorts": [6911],
+  "portsAttributes": {
+    "6911": {
+      "label": "JB Docker KasmVNC",
+      "visibility": "public"
+    }
+  },
+  "postCreateCommand": "bash ./.devcontainer/bootstrap.jps.docker.sh"
+}
