@@ -1,9 +1,16 @@
 {
   "dockerfile": "../Dockerfile",
-  "forwardPorts": [6911],
+  "forwardPorts": [
+    6911,
+    6921
+  ],
   "portsAttributes": {
     "6911": {
       "label": "JB Docker KasmVNC",
+      "visibility": "public"
+    },
+    "6921": {
+      "label": "JB Audio MP3",
       "visibility": "public"
     }
   },
